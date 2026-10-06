@@ -1,3 +1,6 @@
+from .lectura import cargar
+
+
 def pregunta_13():
     """
     Combine las tablas `data/tbl0.tsv` y `data/tbl2.tsv` usando la columna
@@ -15,4 +18,9 @@ def pregunta_13():
         ...
     """
 
-    raise NotImplementedError
+    tbl0 = cargar("tbl0")
+    tbl2 = cargar("tbl2")
+
+    combinada = tbl0.merge(tbl2, on="c0")
+
+    return combinada.groupby("c1")["c5b"].sum()

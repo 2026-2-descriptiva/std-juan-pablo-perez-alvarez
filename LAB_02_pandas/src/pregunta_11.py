@@ -1,3 +1,6 @@
+from .lectura import cargar
+
+
 def pregunta_11():
     """
     En `data/tbl1.tsv`, cada valor de la columna `c0` aparece en varias
@@ -15,4 +18,10 @@ def pregunta_11():
         ...
     """
 
-    raise NotImplementedError
+    tbl1 = cargar("tbl1")
+
+    return (
+        tbl1.sort_values(["c0", "c4"])
+        .groupby("c0", as_index=False)["c4"]
+        .agg(",".join)
+    )
