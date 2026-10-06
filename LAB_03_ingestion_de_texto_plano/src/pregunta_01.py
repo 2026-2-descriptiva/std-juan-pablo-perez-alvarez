@@ -1,3 +1,16 @@
+import re
+from pathlib import Path
+
+import pandas as pd
+
+ARCHIVO = Path(__file__).resolve().parents[1] / "data" / "clusters_report.txt"
+
+# Una fila nueva empieza con el numero del cluster, su cantidad y su
+# porcentaje, y el resto de la linea ya son palabras clave. Las lineas que no
+# coinciden con este patron son continuaciones de la fila anterior.
+INICIO_DE_CLUSTER = re.compile(r"^\s*(\d+)\s+(\d+)\s+([\d,]+)\s*%\s+(.*)$")
+
+
 def pregunta_01():
     """
     El archivo `data/clusters_report.txt` es un reporte de clústeres de
@@ -26,4 +39,42 @@ def pregunta_01():
         ...
     """
 
-    raise NotImplementedError
+    registros = []
+
+    with open(ARCHIVO, "r", encoding="utf-8") as archivo:
+        for linea in archivo:
+            linea = linea.rstrip()
+
+            if not linea:
+                continue
+
+            encontrado = INICIO_DE_CLUSTER.match(linea)
+
+            if encontrado:
+                cluster, cantidad, porcentaje, palabras = encontrado.groups()
+
+                registros.append(
+                    {
+                        "cluster": int(cluster),
+                        "cantidad_de_palabras_clave": int(cantidad),
+                        "porcentaje_de_palabras_clave": float(
+                            porcentaje.replace(",", ".")
+                        ),
+                        "principales_palabras_clave": [palabras],
+                    }
+                )
+
+            elif registros:
+                # Linea de continuacion: pertenece al ultimo cluster leido.
+                registros[-1]["principales_palabras_clave"].append(linea.strip())
+
+    for registro in registros:
+        texto = " ".join(registro["principales_palabras_clave"])
+
+        # El reporte justifica el texto con espacios de relleno y cierra la
+        # lista con un punto; ninguno de los dos hace parte del dato.
+        texto = re.sub(r"\s+", " ", texto).strip().rstrip(".")
+
+        registro["principales_palabras_clave"] = texto
+
+    return pd.DataFrame(registros)
