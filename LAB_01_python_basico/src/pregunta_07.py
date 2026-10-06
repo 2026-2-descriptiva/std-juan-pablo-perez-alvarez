@@ -1,3 +1,6 @@
+from .lectura import cargar_registros
+
+
 def pregunta_07():
     """
     Para cada valor distinto de la segunda columna (`value`), construya la
@@ -11,4 +14,9 @@ def pregunta_07():
         [(0, ["C"]), (1, ["E", "B", "E"]), (2, ["A", "E"]), ...]
     """
 
-    raise NotImplementedError
+    letras_por_valor = {}
+
+    for letter, value, _, _, _ in cargar_registros():
+        letras_por_valor.setdefault(value, []).append(letter)
+
+    return sorted(letras_por_valor.items())

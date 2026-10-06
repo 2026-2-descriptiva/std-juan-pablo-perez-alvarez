@@ -1,3 +1,6 @@
+from .lectura import cargar_registros
+
+
 def pregunta_06():
     """
     La quinta columna (`metrics`) contiene pares `clave:valor` separados por
@@ -13,4 +16,16 @@ def pregunta_06():
         [("aaa", 1, 9), ("bbb", 1, 9), ...]
     """
 
-    raise NotImplementedError
+    maximos = {}
+    minimos = {}
+
+    for _, _, _, _, metrics in cargar_registros():
+        for clave, valor in metrics:
+            if clave not in maximos:
+                maximos[clave] = valor
+                minimos[clave] = valor
+            else:
+                maximos[clave] = max(maximos[clave], valor)
+                minimos[clave] = min(minimos[clave], valor)
+
+    return [(clave, minimos[clave], maximos[clave]) for clave in sorted(maximos)]

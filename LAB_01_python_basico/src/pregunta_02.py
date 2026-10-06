@@ -1,3 +1,6 @@
+from .lectura import cargar_registros
+
+
 def pregunta_02():
     """
     Cuente cuántos registros hay para cada letra de la primera columna
@@ -9,4 +12,9 @@ def pregunta_02():
         [("A", 8), ("B", 7), ("C", 5), ...]
     """
 
-    raise NotImplementedError
+    conteo = {}
+
+    for letter, _, _, _, _ in cargar_registros():
+        conteo[letter] = conteo.get(letter, 0) + 1
+
+    return sorted(conteo.items())

@@ -1,3 +1,6 @@
+from .lectura import cargar_registros
+
+
 def pregunta_05():
     """
     Para cada letra de la primera columna (`letter`), encuentre el valor
@@ -9,4 +12,15 @@ def pregunta_05():
         [("A", 9, 2), ("B", 9, 1), ...]
     """
 
-    raise NotImplementedError
+    maximos = {}
+    minimos = {}
+
+    for letter, value, _, _, _ in cargar_registros():
+        if letter not in maximos:
+            maximos[letter] = value
+            minimos[letter] = value
+        else:
+            maximos[letter] = max(maximos[letter], value)
+            minimos[letter] = min(minimos[letter], value)
+
+    return [(letter, maximos[letter], minimos[letter]) for letter in sorted(maximos)]

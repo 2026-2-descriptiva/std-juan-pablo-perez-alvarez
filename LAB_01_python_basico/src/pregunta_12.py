@@ -1,3 +1,6 @@
+from .lectura import cargar_registros
+
+
 def pregunta_12():
     """
     Para cada letra de la primera columna (`letter`), sume todos los valores
@@ -9,4 +12,10 @@ def pregunta_12():
         {"A": 177, "B": 187, "C": 114, ...}
     """
 
-    raise NotImplementedError
+    sumas = {}
+
+    for letter, _, _, _, metrics in cargar_registros():
+        for _, valor in metrics:
+            sumas[letter] = sumas.get(letter, 0) + valor
+
+    return {letter: sumas[letter] for letter in sorted(sumas)}

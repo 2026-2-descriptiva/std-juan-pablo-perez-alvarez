@@ -1,3 +1,6 @@
+from .lectura import cargar_registros
+
+
 def pregunta_01():
     """
     Calcule la suma de los valores de la segunda columna (`value`) del
@@ -8,4 +11,6 @@ def pregunta_01():
         214
     """
 
-    raise NotImplementedError
+    registros = cargar_registros()
+
+    return sum(value for _, value, _, _, _ in registros)
