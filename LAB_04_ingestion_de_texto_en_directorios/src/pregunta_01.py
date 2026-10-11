@@ -1,3 +1,33 @@
+from pathlib import Path
+
+import pandas as pd
+
+ACTIVIDAD = Path(__file__).resolve().parents[1]
+CARPETA_DATOS = ACTIVIDAD / "data"
+CARPETA_ENTREGA = ACTIVIDAD / "submission"
+
+DIVISIONES = ["train", "test"]
+
+
+def construir_dataset(division):
+    """Arma el DataFrame de una division recorriendo sus carpetas de sentimiento."""
+
+    filas = []
+
+    # sorted() en los dos niveles es lo que hace reproducible el resultado:
+    # las carpetas quedan en orden alfabetico y los archivos tambien.
+    for carpeta in sorted((CARPETA_DATOS / division).iterdir()):
+        if not carpeta.is_dir():
+            continue
+
+        for archivo in sorted(carpeta.glob("*.txt")):
+            frase = archivo.read_text(encoding="utf-8").strip()
+
+            filas.append({"phrase": frase, "target": carpeta.name})
+
+    return pd.DataFrame(filas, columns=["phrase", "target"])
+
+
 def pregunta_01():
     """
     Las frases de este laboratorio no están en una tabla, sino en miles de
@@ -26,4 +56,13 @@ def pregunta_01():
         ...
     """
 
-    raise NotImplementedError
+    CARPETA_ENTREGA.mkdir(exist_ok=True)
+
+    for division in DIVISIONES:
+        dataset = construir_dataset(division)
+
+        dataset.to_csv(
+            CARPETA_ENTREGA / f"{division}_dataset.csv",
+            index=False,
+            encoding="utf-8",
+        )
