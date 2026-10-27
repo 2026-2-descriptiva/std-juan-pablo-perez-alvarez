@@ -1,3 +1,66 @@
+import json
+from pathlib import Path
+
+import pandas as pd
+
+CARPETA_LAB = Path(__file__).resolve().parents[1]
+ARCHIVO_DATOS = CARPETA_LAB / "data" / "insurance.csv.gz"
+CARPETA_SALIDA = CARPETA_LAB / "submission"
+
+K = 5
+CUASI_ORIGINALES = ["age", "sex", "bmi", "children", "region"]
+ESQUEMAS = {
+    "with_children": ["age_group", "sex", "bmi_group", "children_group", "region"],
+    "without_children": ["age_group", "sex", "bmi_group", "region"],
+}
+
+
+def generalizar(datos: pd.DataFrame) -> pd.DataFrame:
+    datos = datos.copy()
+    datos["age_group"] = pd.cut(
+        datos["age"], bins=[17, 29, 39, 49, 64], labels=["18-29", "30-39", "40-49", "50-64"]
+    ).astype(str)
+    datos["bmi_group"] = pd.cut(
+        datos["bmi"],
+        bins=[float("-inf"), 18.5, 25, 30, float("inf")],
+        labels=["bajo peso", "normal", "sobrepeso", "obesidad"],
+        right=False,
+    ).astype(str)
+    datos["children_group"] = pd.cut(
+        datos["children"], bins=[-1, 0, 2, float("inf")], labels=["0", "1-2", "3+"]
+    ).astype(str)
+    return datos
+
+
+def tamano_de_clase(datos: pd.DataFrame, columnas: list[str]) -> pd.Series:
+    """Para cada registro, cuántos registros comparten sus cuasi-identificadores."""
+    return datos.groupby(columnas)[columnas[0]].transform("size")
+
+
+def evaluar_esquema(datos: pd.DataFrame, columnas: list[str]) -> tuple[dict, pd.DataFrame]:
+    tamanos = tamano_de_clase(datos, columnas)
+    publicados = datos[tamanos >= K]
+
+    fuma_por_clase = publicados.groupby(columnas)["smoker"].agg(["nunique", "size"])
+    sin_diversidad = fuma_por_clase[fuma_por_clase["nunique"] == 1]
+
+    resumen = {
+        "quasi_identifiers": columnas,
+        "equivalence_classes": int(datos.groupby(columnas).ngroups),
+        "k_before_suppression": int(tamanos.min()),
+        "suppressed_records": int((tamanos < K).sum()),
+        "published_records": int(len(publicados)),
+        "published_classes": int(len(fuma_por_clase)),
+        "classes_without_smoker_diversity": int(len(sin_diversidad)),
+        "records_without_smoker_diversity": int(sin_diversidad["size"].sum()),
+    }
+    return resumen, publicados
+
+
+def tasa_de_fumadores(datos: pd.DataFrame) -> float:
+    return float((datos["smoker"] == "yes").mean())
+
+
 def pregunta_01():
     """
     Una aseguradora quiere publicar datos de sus afiliados para que un grupo
@@ -80,4 +143,34 @@ def pregunta_01():
         }
     """
 
-    raise NotImplementedError
+    datos = generalizar(pd.read_csv(ARCHIVO_DATOS))
+
+    tamanos_originales = tamano_de_clase(datos, CUASI_ORIGINALES)
+
+    esquemas, publicados_por_esquema = {}, {}
+    for nombre, columnas in ESQUEMAS.items():
+        esquemas[nombre], publicados_por_esquema[nombre] = evaluar_esquema(datos, columnas)
+
+    seleccionado = min(esquemas, key=lambda nombre: esquemas[nombre]["suppressed_records"])
+    publicados = publicados_por_esquema[seleccionado]
+
+    reporte = {
+        "original_k": int(tamanos_originales.min()),
+        "original_unique_records": int((tamanos_originales == 1).sum()),
+        "schemes": esquemas,
+        "selected_scheme": seleccionado,
+        "mean_charges_original": float(datos["charges"].mean()),
+        "mean_charges_published": float(publicados["charges"].mean()),
+        "smoker_rate_original": tasa_de_fumadores(datos),
+        "smoker_rate_published": tasa_de_fumadores(publicados),
+    }
+
+    CARPETA_SALIDA.mkdir(parents=True, exist_ok=True)
+    (CARPETA_SALIDA / "privacy_report.json").write_text(
+        json.dumps(reporte, indent=2, ensure_ascii=False), encoding="utf-8"
+    )
+    publicados[ESQUEMAS[seleccionado] + ["smoker", "charges"]].to_csv(
+        CARPETA_SALIDA / "insurance_published.csv", index=False
+    )
+
+    return reporte
