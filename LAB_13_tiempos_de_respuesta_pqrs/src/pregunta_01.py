@@ -1,4 +1,65 @@
+from pathlib import Path
+
+import numpy as np
 import pandas as pd
+
+CARPETA = Path(__file__).resolve().parents[1]
+CARPETA_DATOS = CARPETA / "data"
+CARPETA_SALIDA = CARPETA / "submission"
+
+CANALES = {
+    "letter": "historical_requests_letter.csv.gz",
+    "web": "historical_requests_web.csv.gz",
+}
+PLAZO_DIAS_HABILES = 15
+DIAS_SEMANA = [
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+    "Sunday",
+]
+
+
+def cargar_solicitudes() -> pd.DataFrame:
+    partes = []
+    for canal, archivo in CANALES.items():
+        datos = pd.read_csv(CARPETA_DATOS / archivo)
+        # Las filas idénticas son la misma solicitud repetida; las que no
+        # tienen record_id se conservan porque son solicitudes válidas.
+        datos = datos.drop_duplicates()
+        datos["channel"] = canal
+        partes.append(datos)
+    solicitudes = pd.concat(partes, ignore_index=True)
+    solicitudes["in_date"] = pd.to_datetime(solicitudes["in_date"])
+    solicitudes["out_date"] = pd.to_datetime(solicitudes["out_date"])
+    return solicitudes
+
+
+def calcular_tiempos(solicitudes: pd.DataFrame) -> pd.DataFrame:
+    solicitudes["answered"] = solicitudes["out_date"].notna()
+    respondidas = solicitudes["answered"]
+
+    entrada = solicitudes.loc[respondidas, "in_date"].to_numpy(dtype="datetime64[D]")
+    salida = solicitudes.loc[respondidas, "out_date"].to_numpy(dtype="datetime64[D]")
+
+    # Días hábiles: de lunes a viernes después de la entrada, hasta la
+    # respuesta incluida. busday_count cuenta [inicio, fin), por eso se
+    # corren ambas fechas un día.
+    solicitudes["business_days"] = np.nan
+    solicitudes.loc[respondidas, "business_days"] = np.busday_count(
+        entrada + 1, salida + 1
+    )
+    solicitudes["calendar_days"] = (
+        solicitudes["out_date"] - solicitudes["in_date"]
+    ).dt.days
+
+    # Una pendiente no cumple: su business_days es NaN y la comparación da False.
+    solicitudes["on_time"] = solicitudes["business_days"] <= PLAZO_DIAS_HABILES
+    solicitudes["year"] = solicitudes["in_date"].dt.year
+    return solicitudes
 
 
 def pregunta_01() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
@@ -61,4 +122,65 @@ def pregunta_01() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
         ...
     """
 
-    raise NotImplementedError
+    solicitudes = calcular_tiempos(cargar_solicitudes())
+
+    # median() ignora los NaN, así que las medianas salen solo de las respondidas.
+    por_canal = (
+        solicitudes.groupby("channel")
+        .agg(
+            requests=("channel", "size"),
+            answered=("answered", "sum"),
+            median_business_days=("business_days", "median"),
+            on_time_rate=("on_time", "mean"),
+        )
+        .reset_index()
+        .sort_values("channel")
+    )
+    por_canal["pending"] = por_canal["requests"] - por_canal["answered"]
+    por_canal = por_canal[
+        [
+            "channel",
+            "requests",
+            "answered",
+            "pending",
+            "median_business_days",
+            "on_time_rate",
+        ]
+    ]
+
+    por_anio = (
+        solicitudes.groupby(["year", "channel"])
+        .agg(
+            requests=("channel", "size"),
+            answered=("answered", "sum"),
+            on_time_rate=("on_time", "mean"),
+        )
+        .reset_index()
+        .sort_values(["year", "channel"])
+    )
+    por_anio["pending"] = por_anio["requests"] - por_anio["answered"]
+    por_anio = por_anio[["year", "channel", "requests", "pending", "on_time_rate"]]
+
+    por_dia = (
+        solicitudes.groupby("day_name")
+        .agg(
+            requests=("day_name", "size"),
+            median_calendar_days=("calendar_days", "median"),
+            median_business_days=("business_days", "median"),
+        )
+        .reindex(DIAS_SEMANA)
+        .rename_axis("day_name")
+        .reset_index()
+    )
+
+    tablas = []
+    for tabla in [por_canal, por_anio, por_dia]:
+        tabla = tabla.reset_index(drop=True).round(4)
+        tablas.append(tabla)
+
+    CARPETA_SALIDA.mkdir(parents=True, exist_ok=True)
+    nombres = ["channel_summary.csv", "yearly_summary.csv", "entry_day_summary.csv"]
+    for tabla, nombre in zip(tablas, nombres):
+        tabla.to_csv(CARPETA_SALIDA / nombre, index=False)
+
+    return tuple(tablas)
